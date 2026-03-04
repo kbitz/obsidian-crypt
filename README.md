@@ -1,50 +1,90 @@
-# Obsidian Crypt
+# Crypt — Per-Folder Encryption for Obsidian
 
-Per-folder encryption for binary files in Obsidian. Lock and unlock folders with a passphrase using AES-256-GCM.
+Crypt encrypts binary files (PDFs, images, spreadsheets) inside your Obsidian vault on a per-folder basis. Lock a folder with a passphrase and its binary contents are encrypted at rest using AES-256-GCM. Markdown files are never touched.
 
-## Features
+## Why
 
-- **Lock Folder** — Encrypt all binary files (PDFs, images, spreadsheets) in a scope folder
-- **Unlock Folder** — Decrypt files with the original passphrase
-- **Add File** — Import a file into a scope folder (encrypts immediately if locked)
-- **Status** — Overview of all scopes with lock state and document counts
+If you store sensitive documents alongside your notes — tax forms, receipts, medical records, scanned IDs — Crypt lets you keep them encrypted when you're not actively using them. Your passphrase is never stored; it's used to derive an encryption key and then discarded.
 
-## How it works
+## How It Works
 
-- Markdown files are **never** encrypted — only binary files matching configured extensions
-- When locked: `document.pdf` → `document.pdf.enc` (ciphertext), plaintext deleted
-- When unlocked: `document.pdf.enc` → `document.pdf` (plaintext restored)
-- Metadata stored in `.vault-meta.json` per scope folder (salt, IVs, file manifest)
-- Passphrase is **never** stored on disk
+1. **Lock a folder** — Pick a scope folder, enter a passphrase (with confirmation). Each binary file is encrypted in place (`file.pdf` → `file.pdf.enc`), the plaintext is deleted, and a manifest is saved.
+2. **Unlock a folder** — Pick a locked folder, enter the passphrase. The plugin verifies it against the first file, then decrypts everything back to its original name.
+3. **Add a file** — Import a file from your filesystem into a scope folder. On desktop, uses a native file picker; on mobile, prompts you to use the share sheet.
+4. **Status** — See all scope folders at a glance: which are locked, which are unlocked, and how many files each contains.
 
-## Crypto
+Operations are atomic per-file — if something interrupts mid-lock, the manifest tracks progress so it can resume cleanly.
 
-- PBKDF2-SHA256 key derivation (100k iterations default, configurable)
-- AES-256-GCM authenticated encryption
-- Random 16-byte salt per scope, random 12-byte IV per file
-- Web Crypto API only — zero npm runtime dependencies
-- Atomic: files processed one at a time, manifest updated after each
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `Crypt: Lock Folder` | Encrypt all target files in a scope folder |
+| `Crypt: Unlock Folder` | Decrypt all files in a locked scope folder |
+| `Crypt: Add File` | Import a file into a scope folder |
+| `Crypt: Status` | Show lock state of all scope folders |
+
+A ribbon icon (lock) also opens the Status view.
+
+## Scope Folders
+
+A "scope" is a top-level vault folder that matches a configurable regex pattern. By default, the pattern is `^\d{4}$`, which matches year-named folders like `2024`, `2025`, etc. Only scope folders can be locked or unlocked.
+
+You can change the pattern in settings to match whatever folder naming scheme you use.
+
+## What Gets Encrypted
+
+Binary files with extensions in the target list: **pdf, csv, xlsx, xls, png, jpg, jpeg, heic, tiff** (configurable in settings).
+
+Files that are always skipped:
+- Markdown (`.md`) files
+- Already-encrypted (`.enc`) files
+- The `.vault-meta.json` manifest itself
+
+## Cryptography
+
+| Parameter | Value |
+|-----------|-------|
+| Key derivation | PBKDF2-SHA256, 100,000 iterations (configurable, min 10,000) |
+| Encryption | AES-256-GCM |
+| Salt | Random 16 bytes, unique per scope folder |
+| IV | Random 12 bytes, unique per file |
+| Implementation | Web Crypto API — zero runtime dependencies |
+
+Your passphrase is never stored anywhere. It's derived into a `CryptoKey`, used for the operation, then discarded.
+
+## Platform Support
+
+Works on both desktop and mobile (iOS/Android). The Web Crypto API is available in all environments Obsidian runs in.
+
+The only difference is the **Add File** command: on desktop it opens a native file picker, on mobile it shows a notice to use the OS share sheet instead.
 
 ## Settings
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Scope pattern | `^\d{4}$` | Regex for top-level folders to offer for lock/unlock |
-| Target extensions | pdf, csv, xlsx, xls, png, jpg, jpeg, heic, tiff | File types to encrypt |
-| PBKDF2 iterations | 100,000 | Key derivation iterations |
-| Document type tags | (empty) | Optional tags for the Add File modal |
+| Scope pattern | `^\d{4}$` | Regex for top-level folders eligible for encryption |
+| Target extensions | pdf, csv, xlsx, xls, png, jpg, jpeg, heic, tiff | File types to encrypt (comma-separated) |
+| PBKDF2 iterations | 100,000 | Key derivation iterations (min 10,000) |
+| Document type tags | *(empty)* | Optional tags for the Add File modal (e.g., W-2, K-1) |
 
-## Install
+## Installation
 
-Build from source:
+### From source
 
 ```bash
+git clone https://github.com/kbitz/obsidian-crypt.git
+cd obsidian-crypt
 npm install
 npm run build
 ```
 
-Then symlink or copy `main.js`, `manifest.json`, and `styles.css` into your vault's `.obsidian/plugins/obsidian-crypt/` directory.
+Copy `main.js`, `manifest.json`, and `styles.css` into your vault at `.obsidian/plugins/obsidian-crypt/`, then enable "Crypt" in Obsidian's Community Plugins settings.
 
-## Mobile (iOS)
+### Manual
 
-Lock/Unlock works identically (Web Crypto available in WebKit). The Add File command shows a notice to use the iOS share sheet instead of the native file picker.
+Download the latest release and extract it into `.obsidian/plugins/obsidian-crypt/` in your vault.
+
+## License
+
+[MIT](LICENSE)
