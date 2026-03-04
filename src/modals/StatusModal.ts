@@ -10,10 +10,19 @@ export class StatusModal extends Modal {
 		this.plugin = plugin;
 	}
 
-	async onOpen(): Promise<void> {
+	onOpen(): void {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.createEl("h2", { text: "Crypt Status" });
+
+		this.renderTable().then(null, (e) => {
+			console.error("Crypt: failed to render status", e);
+			contentEl.createEl("p", { text: "Failed to load status." });
+		});
+	}
+
+	private async renderTable(): Promise<void> {
+		const { contentEl } = this;
 
 		const scopes = this.plugin.getScopes();
 		if (scopes.length === 0) {
@@ -40,7 +49,7 @@ export class StatusModal extends Modal {
 
 			if (meta) {
 				const stateCell = row.createEl("td");
-				const badge = stateCell.createEl("span", {
+				stateCell.createEl("span", {
 					text: meta.state,
 					cls: `crypt-badge crypt-badge-${meta.state}`,
 				});

@@ -2,6 +2,7 @@ import { App, Modal, Notice, Setting } from "obsidian";
 import type CryptPlugin from "../main";
 import { decrypt, deriveKey, fromBase64 } from "../crypto";
 import { readMeta, writeMeta } from "../meta";
+import { addScopeDropdown, addPassphraseField, pluralize } from "./shared";
 
 export class UnlockModal extends Modal {
 	plugin: CryptPlugin;
@@ -13,10 +14,19 @@ export class UnlockModal extends Modal {
 		this.plugin = plugin;
 	}
 
-	async onOpen(): Promise<void> {
+	onOpen(): void {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.createEl("h2", { text: "Unlock Folder" });
+
+		this.loadScopes().then(null, (e) => {
+			console.error("Crypt: failed to load scopes", e);
+			contentEl.createEl("p", { text: "Failed to load locked folders." });
+		});
+	}
+
+	private async loadScopes(): Promise<void> {
+		const { contentEl } = this;
 
 		const scopes = await this.plugin.getLockedScopes();
 		if (scopes.length === 0) {
@@ -24,23 +34,12 @@ export class UnlockModal extends Modal {
 			return;
 		}
 
-		new Setting(contentEl).setName("Folder").addDropdown((dd) => {
-			dd.addOption("", "Select a folder...");
-			for (const s of scopes) {
-				dd.addOption(s, s);
-			}
-			dd.onChange((v) => {
-				this.selectedScope = v || null;
-			});
+		addScopeDropdown(contentEl, scopes, (v) => {
+			this.selectedScope = v;
 		});
 
-		new Setting(contentEl).setName("Passphrase").addText((text) => {
-			text.inputEl.type = "password";
-			text.inputEl.autocomplete = "off";
-			text.setPlaceholder("Enter passphrase");
-			text.onChange((v) => {
-				this.passphrase = v;
-			});
+		addPassphraseField(contentEl, (v) => {
+			this.passphrase = v;
 		});
 
 		new Setting(contentEl).addButton((btn) =>
@@ -62,7 +61,7 @@ export class UnlockModal extends Modal {
 		}
 
 		const meta = await readMeta(this.app.vault, this.selectedScope);
-		if (!meta || meta.state !== "locked") {
+		if (!meta || (meta.state !== "locked" && meta.state !== "locking")) {
 			new Notice(`${this.selectedScope} is not locked.`);
 			return;
 		}
@@ -70,36 +69,56 @@ export class UnlockModal extends Modal {
 		this.close();
 		new Notice(`Unlocking ${this.selectedScope}...`);
 
+		const salt = fromBase64(meta.salt);
+		let key: CryptoKey;
 		try {
-			const salt = fromBase64(meta.salt);
-			const key = await deriveKey(
+			key = await deriveKey(
 				this.passphrase,
 				salt,
 				meta.pbkdf2_iterations
 			);
+		} catch (e) {
+			console.error("Crypt: key derivation failed", e);
+			new Notice(`Unlock failed: ${(e as Error).message}`);
+			return;
+		}
 
-			// Verify passphrase on first file before proceeding
-			const entries = Object.entries(meta.files);
-			if (entries.length > 0) {
-				const [relPath, entry] = entries[0];
-				const encPath = `${this.selectedScope}/${relPath}`;
-				const encFile = this.app.vault.getAbstractFileByPath(encPath);
-				if (encFile) {
+		// Verify passphrase on first file before proceeding
+		const entries = Object.entries(meta.files);
+		let verifiedPlaintext: ArrayBuffer | null = null;
+		if (entries.length > 0) {
+			const [relPath, entry] = entries[0];
+			const encPath = `${this.selectedScope}/${relPath}`;
+			const encFile = this.app.vault.getAbstractFileByPath(encPath);
+			if (encFile) {
+				try {
 					const iv = fromBase64(entry.iv);
 					const ciphertext = await this.app.vault.readBinary(encFile as any);
-					await decrypt(key, iv, ciphertext); // throws on wrong passphrase
+					verifiedPlaintext = await decrypt(key, iv, ciphertext);
+				} catch {
+					new Notice("Wrong passphrase. No files were modified.");
+					return;
 				}
 			}
+		}
 
+		try {
 			let count = 0;
-			for (const [relPath, entry] of entries) {
+			for (let i = 0; i < entries.length; i++) {
+				const [relPath, entry] = entries[i];
 				const encPath = `${this.selectedScope}/${relPath}`;
 				const encFile = this.app.vault.getAbstractFileByPath(encPath);
 				if (!encFile) continue;
 
-				const iv = fromBase64(entry.iv);
-				const ciphertext = await this.app.vault.readBinary(encFile as any);
-				const plaintext = await decrypt(key, iv, ciphertext);
+				let plaintext: ArrayBuffer;
+				if (i === 0 && verifiedPlaintext) {
+					// Reuse already-decrypted result from verification
+					plaintext = verifiedPlaintext;
+				} else {
+					const iv = fromBase64(entry.iv);
+					const ciphertext = await this.app.vault.readBinary(encFile as any);
+					plaintext = await decrypt(key, iv, ciphertext);
+				}
 
 				const plainPath = encPath.replace(/\.enc$/, "");
 				await this.app.vault.createBinary(plainPath, plaintext);
@@ -112,16 +131,11 @@ export class UnlockModal extends Modal {
 			await writeMeta(this.app.vault, this.selectedScope!, meta);
 
 			new Notice(
-				`${this.selectedScope} unlocked — ${count} document${count !== 1 ? "s" : ""} decrypted.`
+				`${this.selectedScope} unlocked — ${pluralize(count, "document")} decrypted.`
 			);
 		} catch (e) {
-			const msg = (e as Error).message || String(e);
-			if (msg.includes("decrypt") || msg.includes("operation")) {
-				new Notice("Wrong passphrase. No files were modified.");
-			} else {
-				console.error("Crypt: unlock failed", e);
-				new Notice(`Unlock failed: ${msg}`);
-			}
+			console.error("Crypt: unlock failed", e);
+			new Notice(`Unlock failed: ${(e as Error).message}`);
 		}
 	}
 

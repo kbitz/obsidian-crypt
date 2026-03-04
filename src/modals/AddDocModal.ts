@@ -1,7 +1,8 @@
 import { App, Modal, Notice, Platform, Setting, TFolder } from "obsidian";
 import type CryptPlugin from "../main";
-import { deriveKey, encrypt, fromBase64, generateIV, toBase64 } from "../crypto";
-import { readMeta, writeMeta, createEmptyMeta, type FileEntry } from "../meta";
+import { decrypt, deriveKey, encrypt, fromBase64, generateIV, toBase64 } from "../crypto";
+import { readMeta, writeMeta, createEmptyMeta, createFileEntry } from "../meta";
+import { addPassphraseField, todayISO } from "./shared";
 
 export class AddDocModal extends Modal {
 	plugin: CryptPlugin;
@@ -38,6 +39,8 @@ export class AddDocModal extends Modal {
 			.setName("Subfolder")
 			.setDesc("Target subfolder within the scope folder");
 
+		// Custom dropdown here (not addScopeDropdown) because onChange
+		// also needs to refresh the subfolder list
 		new Setting(contentEl).setName("Scope folder").addDropdown((dd) => {
 			dd.addOption("", "Select a folder...");
 			for (const s of scopes) {
@@ -45,7 +48,6 @@ export class AddDocModal extends Modal {
 			}
 			dd.onChange((v) => {
 				this.selectedScope = v || null;
-				// Refresh subfolder options
 				if (this.selectedScope) {
 					this.populateSubfolders(subfolderSetting);
 				}
@@ -96,7 +98,6 @@ export class AddDocModal extends Modal {
 		};
 		walk(folder, "");
 
-		// Rebuild the dropdown
 		setting.clear();
 		setting.setName("Subfolder").setDesc("Target subfolder within the scope folder");
 		setting.addDropdown((dd) => {
@@ -117,7 +118,6 @@ export class AddDocModal extends Modal {
 		}
 
 		try {
-			// Electron file dialog
 			const electron = require("electron");
 			const result = await electron.remote.dialog.showOpenDialog({
 				properties: ["openFile"],
@@ -142,7 +142,7 @@ export class AddDocModal extends Modal {
 
 			await this.importFile(fileName, arrayBuffer);
 		} catch {
-			// Fallback: use input element if Electron dialog unavailable
+			// Fallback: DOM file input when Electron dialog is unavailable
 			const input = document.createElement("input");
 			input.type = "file";
 			input.accept = this.plugin.settings.targetExtensions
@@ -164,77 +164,69 @@ export class AddDocModal extends Modal {
 	): Promise<void> {
 		const scope = this.selectedScope!;
 		const subfolder = this.selectedSubfolder;
+		const tag = this.selectedTag || undefined;
 		const destDir = subfolder ? `${scope}/${subfolder}` : scope;
 		const destPath = `${destDir}/${fileName}`;
 
-		const meta = await readMeta(this.app.vault, scope);
-		const isLocked = meta?.state === "locked";
+		try {
+			let meta = await readMeta(this.app.vault, scope);
+			const isLocked = meta?.state === "locked" || meta?.state === "locking";
 
-		if (isLocked && meta) {
-			// Encrypt immediately
-			new Notice("Encrypting and adding file...");
-			// We need a passphrase — prompt inline
-			const passphrase = await this.promptPassphrase();
-			if (!passphrase) return;
+			if (isLocked && meta) {
+				new Notice("Encrypting and adding file...");
+				const passphrase = await this.promptPassphrase();
+				if (!passphrase) return;
 
-			const salt = fromBase64(meta.salt);
-			const key = await deriveKey(passphrase, salt, meta.pbkdf2_iterations);
+				const salt = fromBase64(meta.salt);
+				const key = await deriveKey(passphrase, salt, meta.pbkdf2_iterations);
 
-			// Verify key against an existing file first
-			const existing = Object.entries(meta.files);
-			if (existing.length > 0) {
-				try {
-					const [relPath, entry] = existing[0];
-					const encPath = `${scope}/${relPath}`;
-					const encFile = this.app.vault.getAbstractFileByPath(encPath);
-					if (encFile) {
-						const { decrypt } = await import("../crypto");
-						const iv = fromBase64(entry.iv);
-						const ct = await this.app.vault.readBinary(encFile as any);
-						await decrypt(key, iv, ct);
+				// Verify key against an existing file
+				const existing = Object.entries(meta.files);
+				if (existing.length > 0) {
+					try {
+						const [relPath, entry] = existing[0];
+						const encPath = `${scope}/${relPath}`;
+						const encFile = this.app.vault.getAbstractFileByPath(encPath);
+						if (encFile) {
+							const iv = fromBase64(entry.iv);
+							const ct = await this.app.vault.readBinary(encFile as any);
+							await decrypt(key, iv, ct);
+						}
+					} catch {
+						new Notice("Wrong passphrase.");
+						return;
 					}
-				} catch {
-					new Notice("Wrong passphrase.");
-					return;
 				}
-			}
 
-			const iv = generateIV();
-			const ciphertext = await encrypt(key, iv, data);
-			await this.app.vault.createBinary(destPath + ".enc", ciphertext);
+				const iv = generateIV();
+				const ciphertext = await encrypt(key, iv, data);
+				await this.app.vault.createBinary(destPath + ".enc", ciphertext);
 
-			const relative = (destPath + ".enc").slice(scope.length + 1);
-			const entry: FileEntry = {
-				original_name: fileName,
-				iv: toBase64(iv),
-				added: new Date().toISOString().slice(0, 10),
-				tag: this.selectedTag || undefined,
-				subfolder,
-				size_bytes: data.byteLength,
-			};
-			meta.files[relative] = entry;
-			await writeMeta(this.app.vault, scope, meta);
-		} else {
-			// Unlocked — copy as plaintext
-			await this.app.vault.createBinary(destPath, data);
+				const relative = (destPath + ".enc").slice(scope.length + 1);
+				meta.files[relative] = createFileEntry(
+					fileName, toBase64(iv), todayISO(), subfolder, data.byteLength, tag
+				);
+				await writeMeta(this.app.vault, scope, meta);
+			} else {
+				await this.app.vault.createBinary(destPath, data);
 
-			if (meta) {
+				if (!meta) {
+					meta = createEmptyMeta("", this.plugin.settings.pbkdf2Iterations);
+				}
+
 				const relative = destPath.slice(scope.length + 1);
-				const entry: FileEntry = {
-					original_name: fileName,
-					iv: "",
-					added: new Date().toISOString().slice(0, 10),
-					tag: this.selectedTag || undefined,
-					subfolder,
-					size_bytes: data.byteLength,
-				};
-				meta.files[relative] = entry;
+				meta.files[relative] = createFileEntry(
+					fileName, "", todayISO(), subfolder, data.byteLength, tag
+				);
 				await writeMeta(this.app.vault, scope, meta);
 			}
-		}
 
-		this.close();
-		new Notice(`Added ${fileName} to ${destDir}.`);
+			this.close();
+			new Notice(`Added ${fileName} to ${destDir}.`);
+		} catch (e) {
+			console.error("Crypt: add file failed", e);
+			new Notice(`Add file failed: ${(e as Error).message}`);
+		}
 	}
 
 	private promptPassphrase(): Promise<string | null> {
@@ -246,6 +238,9 @@ export class AddDocModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+		this.selectedScope = null;
+		this.selectedSubfolder = "";
+		this.selectedTag = "";
 	}
 }
 
@@ -260,14 +255,10 @@ class PassphrasePrompt extends Modal {
 
 	onOpen(): void {
 		const { contentEl } = this;
-		contentEl.createEl("h3", { text: "Enter passphrase to encrypt" });
+		contentEl.createEl("h2", { text: "Enter passphrase to encrypt" });
 
-		new Setting(contentEl).setName("Passphrase").addText((text) => {
-			text.inputEl.type = "password";
-			text.inputEl.autocomplete = "off";
-			text.onChange((v) => {
-				this.passphrase = v;
-			});
+		addPassphraseField(contentEl, (v) => {
+			this.passphrase = v;
 		});
 
 		new Setting(contentEl).addButton((btn) =>
@@ -283,5 +274,6 @@ class PassphrasePrompt extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+		this.passphrase = "";
 	}
 }

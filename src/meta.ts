@@ -2,7 +2,7 @@
  * .vault-meta.json schema, read/write, migration.
  */
 
-import { Vault } from "obsidian";
+import type { Vault } from "obsidian";
 
 export const META_FILENAME = ".vault-meta.json";
 export const CURRENT_VERSION = 1;
@@ -18,7 +18,7 @@ export interface FileEntry {
 
 export interface VaultMeta {
 	version: number;
-	state: "locked" | "unlocked";
+	state: "locked" | "unlocked" | "locking";
 	salt: string; // base64
 	pbkdf2_iterations: number;
 	locked_at: string | null;
@@ -39,17 +39,46 @@ export function createEmptyMeta(
 	};
 }
 
+export function createFileEntry(
+	name: string,
+	iv: string,
+	added: string,
+	subfolder: string,
+	sizeBytes: number,
+	tag?: string
+): FileEntry {
+	return {
+		original_name: name,
+		iv,
+		added,
+		subfolder,
+		size_bytes: sizeBytes,
+		...(tag ? { tag } : {}),
+	};
+}
+
+/** Duck-type check: file-like objects have a string `path` property and no `children`. */
+function isFile(obj: unknown): boolean {
+	return (
+		typeof obj === "object" &&
+		obj !== null &&
+		"path" in obj &&
+		typeof (obj as Record<string, unknown>).path === "string" &&
+		!("children" in obj)
+	);
+}
+
 export async function readMeta(
 	vault: Vault,
 	scopePath: string
 ): Promise<VaultMeta | null> {
 	const metaPath = `${scopePath}/${META_FILENAME}`;
 	const file = vault.getAbstractFileByPath(metaPath);
-	if (!file) return null;
+	if (!file || !isFile(file)) return null;
 
 	try {
 		const content = await vault.read(file as any);
-		const parsed = JSON.parse(content) as VaultMeta;
+		const parsed = JSON.parse(content);
 		return migrate(parsed);
 	} catch {
 		return null;
@@ -64,14 +93,37 @@ export async function writeMeta(
 	const metaPath = `${scopePath}/${META_FILENAME}`;
 	const content = JSON.stringify(meta, null, 2);
 	const existing = vault.getAbstractFileByPath(metaPath);
-	if (existing) {
+	if (existing && isFile(existing)) {
 		await vault.modify(existing as any, content);
 	} else {
 		await vault.create(metaPath, content);
 	}
 }
 
-function migrate(meta: VaultMeta): VaultMeta {
+function migrate(raw: unknown): VaultMeta | null {
+	if (
+		typeof raw !== "object" ||
+		raw === null ||
+		!("version" in raw) ||
+		!("state" in raw) ||
+		!("salt" in raw) ||
+		!("files" in raw)
+	) {
+		return null;
+	}
+
+	const meta = raw as VaultMeta;
+
+	if (
+		typeof meta.version !== "number" ||
+		typeof meta.state !== "string" ||
+		typeof meta.salt !== "string" ||
+		typeof meta.files !== "object" ||
+		meta.files === null
+	) {
+		return null;
+	}
+
 	// Future migrations go here. For now, version 1 is current.
 	return meta;
 }

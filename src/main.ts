@@ -75,7 +75,7 @@ export default class CryptPlugin extends Plugin {
 		const locked: string[] = [];
 		for (const scope of this.getScopes()) {
 			const meta = await readMeta(this.app.vault, scope);
-			if (meta?.state === "locked") {
+			if (meta?.state === "locked" || meta?.state === "locking") {
 				locked.push(scope);
 			}
 		}

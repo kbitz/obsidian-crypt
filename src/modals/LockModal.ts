@@ -1,18 +1,20 @@
-import { App, Modal, Notice, Setting, TFile, TFolder } from "obsidian";
+import { App, Modal, Notice, Setting } from "obsidian";
 import type CryptPlugin from "../main";
 import {
 	deriveKey,
 	encrypt,
+	fromBase64,
 	generateIV,
 	generateSalt,
 	toBase64,
 } from "../crypto";
 import {
 	createEmptyMeta,
+	createFileEntry,
 	readMeta,
 	writeMeta,
-	type FileEntry,
 } from "../meta";
+import { addScopeDropdown, addPassphraseField, pluralize, todayISO } from "./shared";
 
 export class LockModal extends Modal {
 	plugin: CryptPlugin;
@@ -38,23 +40,12 @@ export class LockModal extends Modal {
 			return;
 		}
 
-		new Setting(contentEl).setName("Folder").addDropdown((dd) => {
-			dd.addOption("", "Select a folder...");
-			for (const s of scopes) {
-				dd.addOption(s, s);
-			}
-			dd.onChange((v) => {
-				this.selectedScope = v || null;
-			});
+		addScopeDropdown(contentEl, scopes, (v) => {
+			this.selectedScope = v;
 		});
 
-		new Setting(contentEl).setName("Passphrase").addText((text) => {
-			text.inputEl.type = "password";
-			text.inputEl.autocomplete = "off";
-			text.setPlaceholder("Enter passphrase");
-			text.onChange((v) => {
-				this.passphrase = v;
-			});
+		addPassphraseField(contentEl, (v) => {
+			this.passphrase = v;
 		});
 
 		new Setting(contentEl).setName("Confirm passphrase").addText((text) => {
@@ -75,7 +66,8 @@ export class LockModal extends Modal {
 	}
 
 	async doLock(): Promise<void> {
-		if (!this.selectedScope) {
+		const scope = this.selectedScope;
+		if (!scope) {
 			new Notice("Select a folder first.");
 			return;
 		}
@@ -88,17 +80,18 @@ export class LockModal extends Modal {
 			return;
 		}
 
-		const existing = await readMeta(this.app.vault, this.selectedScope);
+		const existing = await readMeta(this.app.vault, scope);
 		if (existing && existing.state === "locked") {
-			new Notice(`${this.selectedScope} is already locked.`);
+			new Notice(`${scope} is already locked.`);
 			return;
 		}
 
 		this.close();
-		new Notice(`Locking ${this.selectedScope}...`);
+		new Notice(`Locking ${scope}...`);
 
 		try {
-			const salt = generateSalt();
+			// Reuse existing salt on re-lock; only generate fresh salt for new scopes
+			const salt = existing ? fromBase64(existing.salt) : generateSalt();
 			const key = await deriveKey(
 				this.passphrase,
 				salt,
@@ -109,12 +102,17 @@ export class LockModal extends Modal {
 				toBase64(salt),
 				this.plugin.settings.pbkdf2Iterations
 			);
-			if (!existing) {
-				meta.salt = toBase64(salt);
-			}
 
-			const files = this.plugin.getTargetFiles(this.selectedScope);
+			// Clear stale file entries before re-populating
+			meta.files = {};
+
+			// Set intermediate state for crash recovery
+			meta.state = "locking";
+			await writeMeta(this.app.vault, scope, meta);
+
+			const files = this.plugin.getTargetFiles(scope);
 			let count = 0;
+			const today = todayISO();
 
 			for (const file of files) {
 				const iv = generateIV();
@@ -125,30 +123,25 @@ export class LockModal extends Modal {
 				await this.app.vault.createBinary(encPath, ciphertext);
 				await this.app.vault.delete(file);
 
-				const relative = file.path.slice(this.selectedScope!.length + 1);
+				const relative = file.path.slice(scope.length + 1);
 				const subfolder = relative.includes("/")
 					? relative.substring(0, relative.lastIndexOf("/"))
 					: "";
 
-				const entry: FileEntry = {
-					original_name: file.name,
-					iv: toBase64(iv),
-					added: new Date().toISOString().slice(0, 10),
-					subfolder,
-					size_bytes: plaintext.byteLength,
-				};
-				meta.files[relative + ".enc"] = entry;
+				meta.files[relative + ".enc"] = createFileEntry(
+					file.name, toBase64(iv), today, subfolder, plaintext.byteLength
+				);
 
-				await writeMeta(this.app.vault, this.selectedScope!, meta);
+				await writeMeta(this.app.vault, scope, meta);
 				count++;
 			}
 
 			meta.state = "locked";
 			meta.locked_at = new Date().toISOString();
-			await writeMeta(this.app.vault, this.selectedScope!, meta);
+			await writeMeta(this.app.vault, scope, meta);
 
 			new Notice(
-				`${this.selectedScope} locked — ${count} document${count !== 1 ? "s" : ""} encrypted.`
+				`${scope} locked — ${pluralize(count, "document")} encrypted.`
 			);
 		} catch (e) {
 			console.error("Crypt: lock failed", e);

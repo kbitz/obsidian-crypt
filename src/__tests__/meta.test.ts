@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
 	createEmptyMeta,
 	readMeta,
@@ -7,24 +7,7 @@ import {
 	CURRENT_VERSION,
 	VaultMeta,
 } from "../meta";
-
-function makeMockVault(files: Record<string, string> = {}) {
-	return {
-		getAbstractFileByPath: vi.fn((path: string) =>
-			path in files ? { path } : null
-		),
-		read: vi.fn(async (file: { path: string }) => {
-			if (file.path in files) return files[file.path];
-			throw new Error("File not found");
-		}),
-		modify: vi.fn(async (file: { path: string }, content: string) => {
-			files[file.path] = content;
-		}),
-		create: vi.fn(async (path: string, content: string) => {
-			files[path] = content;
-		}),
-	};
-}
+import { makeMockVault } from "./helpers";
 
 describe("createEmptyMeta", () => {
 	it("returns correct structure", () => {
