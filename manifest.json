@@ -4,6 +4,7 @@
 	"version": "1.0.0",
 	"minAppVersion": "1.4.0",
 	"description": "Per-folder encryption for binary files. Lock/unlock folders with a passphrase using AES-256-GCM.",
-	"author": "KB",
+	"author": "Karl Bitz",
+	"authorUrl": "https://github.com/kbitz",
 	"isDesktopOnly": false
 }
