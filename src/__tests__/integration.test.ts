@@ -27,16 +27,19 @@ const ITERATIONS = 1000;
 /** Minimal in-memory vault: maps path → ArrayBuffer */
 type MemVault = Map<string, ArrayBuffer>;
 
-/** Simulate LockModal.doLock — same logic as the real modal */
+/** Simulate LockModal.doLock — same logic as the real modal (with #1 salt fix) */
 async function lockScope(
 	vault: MemVault,
 	scopePath: string,
 	filePaths: string[],
 	passphrase: string,
+	existingMeta?: VaultMeta,
 ): Promise<VaultMeta> {
-	const salt = generateSalt();
+	// Reuse existing salt on re-lock (#1 fix)
+	const salt = existingMeta ? fromBase64(existingMeta.salt) : generateSalt();
 	const key = await deriveKey(passphrase, salt, ITERATIONS);
-	const meta = createEmptyMeta(toBase64(salt), ITERATIONS);
+	const meta = existingMeta ?? createEmptyMeta(toBase64(salt), ITERATIONS);
+	meta.files = {}; // Clear stale entries (#5 fix)
 
 	for (const filePath of filePaths) {
 		const plaintext = vault.get(filePath);
@@ -215,5 +218,76 @@ describe("lock/unlock folder with subfolders", () => {
 
 		// Vault unchanged — all .enc files still there, no plaintext restored
 		expect([...vault.keys()].sort()).toEqual(encPaths.sort());
+	});
+});
+
+describe("re-lock round-trip (#1 salt reuse)", () => {
+	it("lock → unlock → re-lock → unlock with same passphrase", async () => {
+		const vault: MemVault = new Map();
+		const original = new Uint8Array([0xca, 0xfe, 0xba, 0xbe, 1, 2, 3, 4]);
+		vault.set("scope/report.pdf", original.buffer);
+
+		const passphrase = "round-trip-pass";
+
+		// First lock
+		const meta1 = await lockScope(vault, "scope", ["scope/report.pdf"], passphrase);
+		expect(meta1.state).toBe("locked");
+		expect(vault.has("scope/report.pdf")).toBe(false);
+
+		// First unlock
+		const count1 = await unlockScope(vault, "scope", meta1, passphrase);
+		expect(count1).toBe(1);
+		expect(new Uint8Array(vault.get("scope/report.pdf")!)).toEqual(original);
+
+		// Re-lock with existing meta (reuses salt)
+		const meta2 = await lockScope(
+			vault, "scope", ["scope/report.pdf"], passphrase, meta1
+		);
+		expect(meta2.state).toBe("locked");
+		expect(meta2.salt).toBe(meta1.salt); // Same salt reused
+		expect(vault.has("scope/report.pdf")).toBe(false);
+
+		// Second unlock — must succeed with same passphrase
+		const count2 = await unlockScope(vault, "scope", meta2, passphrase);
+		expect(count2).toBe(1);
+		expect(new Uint8Array(vault.get("scope/report.pdf")!)).toEqual(original);
+	});
+
+	it("re-lock clears stale file entries", async () => {
+		const vault: MemVault = new Map();
+		vault.set("scope/a.pdf", new Uint8Array([1, 2]).buffer);
+		vault.set("scope/b.pdf", new Uint8Array([3, 4]).buffer);
+
+		const passphrase = "stale-test";
+
+		// Lock both files
+		const meta = await lockScope(
+			vault, "scope", ["scope/a.pdf", "scope/b.pdf"], passphrase
+		);
+		expect(Object.keys(meta.files)).toHaveLength(2);
+
+		// Unlock
+		await unlockScope(vault, "scope", meta, passphrase);
+
+		// Delete b.pdf from vault, re-lock only a.pdf
+		vault.delete("scope/b.pdf");
+		const meta2 = await lockScope(
+			vault, "scope", ["scope/a.pdf"], passphrase, meta
+		);
+
+		// Stale entry for b.pdf.enc should be gone
+		expect(Object.keys(meta2.files)).toHaveLength(1);
+		expect(meta2.files["a.pdf.enc"]).toBeDefined();
+		expect(meta2.files["b.pdf.enc"]).toBeUndefined();
+	});
+});
+
+describe("locking intermediate state (#6)", () => {
+	it("lockScope sets state to locked after completion", async () => {
+		const vault: MemVault = new Map();
+		vault.set("scope/doc.pdf", new Uint8Array([10, 20]).buffer);
+
+		const meta = await lockScope(vault, "scope", ["scope/doc.pdf"], "pass");
+		expect(meta.state).toBe("locked");
 	});
 });
