@@ -1,0 +1,37 @@
+.crypt-status-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.crypt-status-table th,
+.crypt-status-table td {
+	padding: 6px 12px;
+	text-align: left;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.crypt-status-table th {
+	font-weight: 600;
+	color: var(--text-muted);
+	font-size: 0.85em;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.crypt-badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 4px;
+	font-size: 0.85em;
+	font-weight: 500;
+}
+
+.crypt-badge-locked {
+	background: var(--background-modifier-error);
+	color: var(--text-on-accent);
+}
+
+.crypt-badge-unlocked {
+	background: var(--background-modifier-success);
+	color: var(--text-on-accent);
+}
