@@ -6,7 +6,7 @@ import {
 	META_FILENAME,
 	CURRENT_VERSION,
 	VaultMeta,
-} from "./meta";
+} from "../meta";
 
 function makeMockVault(files: Record<string, string> = {}) {
 	return {
