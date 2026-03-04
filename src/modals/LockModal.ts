@@ -120,7 +120,7 @@ export class LockModal extends Modal {
 				const ciphertext = await encrypt(key, iv, plaintext);
 
 				const encPath = file.path + ".enc";
-				await this.app.vault.createBinary(encPath, ciphertext);
+				await this.app.vault.adapter.writeBinary(encPath, new Uint8Array(ciphertext));
 				await this.app.vault.delete(file);
 
 				const relative = file.path.slice(scope.length + 1);

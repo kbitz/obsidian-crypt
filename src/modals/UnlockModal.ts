@@ -121,7 +121,7 @@ export class UnlockModal extends Modal {
 				}
 
 				const plainPath = encPath.replace(/\.enc$/, "");
-				await this.app.vault.createBinary(plainPath, plaintext);
+				await this.app.vault.adapter.writeBinary(plainPath, new Uint8Array(plaintext));
 				await this.app.vault.delete(encFile as any);
 				count++;
 			}
