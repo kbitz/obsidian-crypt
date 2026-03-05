@@ -2,6 +2,7 @@ import { App, Platform, PluginSettingTab, Setting } from "obsidian";
 import type CryptPlugin from "./main";
 
 export interface CryptSettings {
+	scopeRoot: string;
 	scopePattern: string;
 	targetExtensions: string[];
 	pbkdf2Iterations: number;
@@ -10,6 +11,7 @@ export interface CryptSettings {
 }
 
 export const DEFAULT_SETTINGS: CryptSettings = {
+	scopeRoot: "",
 	scopePattern: "^\\d{4}$",
 	targetExtensions: [
 		"pdf", "csv", "xlsx", "xls", "png", "jpg", "jpeg", "heic", "tiff",
@@ -32,9 +34,24 @@ export class CryptSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
+			.setName("Scope root")
+			.setDesc(
+				"Folder to look inside for scope folders. Leave empty for vault root."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("/")
+					.setValue(this.plugin.settings.scopeRoot)
+					.onChange(async (value) => {
+						this.plugin.settings.scopeRoot = value.replace(/^\/+|\/+$/g, "");
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
 			.setName("Scope pattern")
 			.setDesc(
-				"Regex matching top-level folders eligible for lock/unlock. Default matches year folders (2024, 2025, etc.)."
+				"Regex matching folder names inside the scope root. Default matches year folders (2024, 2025, etc.)."
 			)
 			.addText((text) =>
 				text

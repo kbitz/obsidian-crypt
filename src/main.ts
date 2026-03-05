@@ -96,7 +96,7 @@ export default class CryptPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	/** Get top-level folders matching the scope pattern. */
+	/** Get folders matching the scope pattern inside the scope root. */
 	getScopes(): string[] {
 		let re: RegExp;
 		try {
@@ -105,11 +105,20 @@ export default class CryptPlugin extends Plugin {
 			return [];
 		}
 
-		const root = this.app.vault.getRoot();
+		const rootPath = this.settings.scopeRoot;
+		let rootFolder: TFolder;
+		if (rootPath) {
+			const f = this.app.vault.getAbstractFileByPath(rootPath);
+			if (!(f instanceof TFolder)) return [];
+			rootFolder = f;
+		} else {
+			rootFolder = this.app.vault.getRoot();
+		}
+
 		const scopes: string[] = [];
-		for (const child of root.children) {
+		for (const child of rootFolder.children) {
 			if (child instanceof TFolder && re.test(child.name)) {
-				scopes.push(child.name);
+				scopes.push(child.path);
 			}
 		}
 		return scopes.sort();
@@ -129,11 +138,11 @@ export default class CryptPlugin extends Plugin {
 
 	/** Resolve a file or folder to its parent scope, or null if not in a scope. */
 	resolveScope(file: TAbstractFile): string | null {
-		const scopes = new Set(this.getScopes());
-		// Walk up the path to find a scope folder
-		const parts = file.path.split("/");
-		if (parts.length > 0 && scopes.has(parts[0])) {
-			return parts[0];
+		const scopes = this.getScopes();
+		for (const scope of scopes) {
+			if (file.path === scope || file.path.startsWith(scope + "/")) {
+				return scope;
+			}
 		}
 		return null;
 	}
