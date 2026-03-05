@@ -3,7 +3,7 @@ import type CryptPlugin from "../main";
 import { decrypt, deriveKey, fromBase64 } from "../crypto";
 import { readMeta, vaultWriteBinary, writeMeta } from "../meta";
 import { addScopeDropdown, pluralize } from "./shared";
-import { getPassphrase, deletePassphrase } from "../keychain";
+import { getPassphrase } from "../keychain";
 
 export class UnlockModal extends Modal {
 	plugin: CryptPlugin;
@@ -159,14 +159,6 @@ export class UnlockModal extends Modal {
 			meta.state = "unlocked";
 			meta.locked_at = null;
 			await writeMeta(this.app.vault, scope, meta);
-
-			if (this.plugin.settings.useKeychain) {
-				try {
-					await deletePassphrase(scope);
-				} catch (e) {
-					console.error("Crypt: keychain delete failed", e);
-				}
-			}
 
 			new Notice(
 				`${scope} unlocked — ${pluralize(count, "document")} decrypted.`

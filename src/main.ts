@@ -5,6 +5,7 @@ import { UnlockModal } from "./modals/UnlockModal";
 import { AddDocModal } from "./modals/AddDocModal";
 import { StatusModal } from "./modals/StatusModal";
 import { readMeta, META_FILENAME } from "./meta";
+import { getPassphrase } from "./keychain";
 
 export default class CryptPlugin extends Plugin {
 	settings: CryptSettings = DEFAULT_SETTINGS;
@@ -55,6 +56,27 @@ export default class CryptPlugin extends Plugin {
 						.onClick(async () => {
 							const meta = await readMeta(this.app.vault, scope);
 							const isLocked = meta?.state === "locked" || meta?.state === "locking";
+
+							// Bypass modal if keychain has the passphrase
+							if (this.settings.useKeychain) {
+								const saved = await getPassphrase(scope);
+								if (saved) {
+									if (isLocked) {
+										const modal = new UnlockModal(this.app, this, scope);
+										modal.selectedScope = scope;
+										modal.passphrase = saved;
+										await modal.doUnlock();
+									} else {
+										const modal = new LockModal(this.app, this, scope);
+										modal.selectedScope = scope;
+										modal.passphrase = saved;
+										modal.confirm = saved;
+										await modal.doLock();
+									}
+									return;
+								}
+							}
+
 							if (isLocked) {
 								new UnlockModal(this.app, this, scope).open();
 							} else {
