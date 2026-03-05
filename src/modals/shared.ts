@@ -3,12 +3,16 @@ import { Setting } from "obsidian";
 export function addScopeDropdown(
 	contentEl: HTMLElement,
 	scopes: string[],
-	onChange: (value: string | null) => void
+	onChange: (value: string | null) => void,
+	initialValue?: string | null
 ): void {
 	new Setting(contentEl).setName("Folder").addDropdown((dd) => {
 		dd.addOption("", "Select a folder...");
 		for (const s of scopes) {
 			dd.addOption(s, s);
+		}
+		if (initialValue && scopes.includes(initialValue)) {
+			dd.setValue(initialValue);
 		}
 		dd.onChange((v) => {
 			onChange(v || null);

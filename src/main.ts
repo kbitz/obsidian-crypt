@@ -1,4 +1,4 @@
-import { Plugin, TFile, TFolder } from "obsidian";
+import { Menu, Plugin, TAbstractFile, TFile, TFolder } from "obsidian";
 import { CryptSettingTab, DEFAULT_SETTINGS, type CryptSettings } from "./settings";
 import { LockModal } from "./modals/LockModal";
 import { UnlockModal } from "./modals/UnlockModal";
@@ -11,6 +11,8 @@ export default class CryptPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+
+		this.registerExtensions(["enc"], "enc");
 
 		this.addCommand({
 			id: "lock-folder",
@@ -41,6 +43,27 @@ export default class CryptPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new CryptSettingTab(this.app, this));
+
+		this.registerEvent(
+			this.app.workspace.on("file-menu", (menu: Menu, file: TAbstractFile) => {
+				const scope = this.resolveScope(file);
+				if (!scope) return;
+
+				menu.addItem((item) => {
+					item.setTitle("Crypt: Lock / Unlock")
+						.setIcon("lock")
+						.onClick(async () => {
+							const meta = await readMeta(this.app.vault, scope);
+							const isLocked = meta?.state === "locked" || meta?.state === "locking";
+							if (isLocked) {
+								new UnlockModal(this.app, this, scope).open();
+							} else {
+								new LockModal(this.app, this, scope).open();
+							}
+						});
+				});
+			})
+		);
 	}
 
 	async loadSettings(): Promise<void> {
@@ -80,6 +103,17 @@ export default class CryptPlugin extends Plugin {
 			}
 		}
 		return locked;
+	}
+
+	/** Resolve a file or folder to its parent scope, or null if not in a scope. */
+	resolveScope(file: TAbstractFile): string | null {
+		const scopes = new Set(this.getScopes());
+		// Walk up the path to find a scope folder
+		const parts = file.path.split("/");
+		if (parts.length > 0 && scopes.has(parts[0])) {
+			return parts[0];
+		}
+		return null;
 	}
 
 	/** Find all target files (by extension) under a scope folder, excluding .enc and meta files. */

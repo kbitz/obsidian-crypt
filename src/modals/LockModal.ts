@@ -24,9 +24,10 @@ export class LockModal extends Modal {
 	passphrase = "";
 	confirm = "";
 
-	constructor(app: App, plugin: CryptPlugin) {
+	constructor(app: App, plugin: CryptPlugin, initialScope?: string) {
 		super(app);
 		this.plugin = plugin;
+		if (initialScope) this.selectedScope = initialScope;
 	}
 
 	onOpen(): void {
@@ -44,7 +45,7 @@ export class LockModal extends Modal {
 
 		addScopeDropdown(contentEl, scopes, (v) => {
 			this.selectedScope = v;
-		});
+		}, this.selectedScope);
 
 		addPassphraseField(contentEl, (v) => {
 			this.passphrase = v;

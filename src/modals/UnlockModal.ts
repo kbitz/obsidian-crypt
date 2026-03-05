@@ -10,9 +10,12 @@ export class UnlockModal extends Modal {
 	selectedScope: string | null = null;
 	passphrase = "";
 
-	constructor(app: App, plugin: CryptPlugin) {
+	private initialScope?: string;
+
+	constructor(app: App, plugin: CryptPlugin, initialScope?: string) {
 		super(app);
 		this.plugin = plugin;
+		this.initialScope = initialScope;
 	}
 
 	onOpen(): void {
@@ -37,7 +40,7 @@ export class UnlockModal extends Modal {
 
 		let passphraseInput: HTMLInputElement | null = null;
 
-		addScopeDropdown(contentEl, scopes, async (v) => {
+		const onScopeChange = async (v: string | null) => {
 			this.selectedScope = v;
 			if (v && this.plugin.settings.useKeychain) {
 				const saved = await getPassphrase(v);
@@ -46,7 +49,15 @@ export class UnlockModal extends Modal {
 					passphraseInput.value = saved;
 				}
 			}
-		});
+		};
+
+		addScopeDropdown(contentEl, scopes, onScopeChange, this.initialScope);
+
+		if (this.initialScope) {
+			this.selectedScope = this.initialScope;
+			// Trigger keychain lookup for pre-selected scope
+			onScopeChange(this.initialScope);
+		}
 
 		new Setting(contentEl).setName("Passphrase").addText((text) => {
 			text.inputEl.type = "password";
