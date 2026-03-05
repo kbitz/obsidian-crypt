@@ -1,8 +1,9 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import type CryptPlugin from "../main";
 import { decrypt, deriveKey, fromBase64 } from "../crypto";
-import { readMeta, writeMeta } from "../meta";
-import { addScopeDropdown, addPassphraseField, pluralize } from "./shared";
+import { readMeta, vaultWriteBinary, writeMeta } from "../meta";
+import { addScopeDropdown, pluralize } from "./shared";
+import { getPassphrase, deletePassphrase } from "../keychain";
 
 export class UnlockModal extends Modal {
 	plugin: CryptPlugin;
@@ -34,12 +35,27 @@ export class UnlockModal extends Modal {
 			return;
 		}
 
-		addScopeDropdown(contentEl, scopes, (v) => {
+		let passphraseInput: HTMLInputElement | null = null;
+
+		addScopeDropdown(contentEl, scopes, async (v) => {
 			this.selectedScope = v;
+			if (v && this.plugin.settings.useKeychain) {
+				const saved = await getPassphrase(v);
+				if (saved && passphraseInput) {
+					this.passphrase = saved;
+					passphraseInput.value = saved;
+				}
+			}
 		});
 
-		addPassphraseField(contentEl, (v) => {
-			this.passphrase = v;
+		new Setting(contentEl).setName("Passphrase").addText((text) => {
+			text.inputEl.type = "password";
+			text.inputEl.autocomplete = "off";
+			text.setPlaceholder("Enter passphrase");
+			text.onChange((v) => {
+				this.passphrase = v;
+			});
+			passphraseInput = text.inputEl;
 		});
 
 		new Setting(contentEl).addButton((btn) =>
@@ -121,7 +137,7 @@ export class UnlockModal extends Modal {
 				}
 
 				const plainPath = encPath.replace(/\.enc$/, "");
-				await this.app.vault.adapter.writeBinary(plainPath, new Uint8Array(plaintext));
+				await vaultWriteBinary(this.app.vault, plainPath, plaintext);
 				await this.app.vault.delete(encFile as any);
 				count++;
 			}
@@ -129,6 +145,14 @@ export class UnlockModal extends Modal {
 			meta.state = "unlocked";
 			meta.locked_at = null;
 			await writeMeta(this.app.vault, this.selectedScope!, meta);
+
+			if (this.plugin.settings.useKeychain) {
+				try {
+					await deletePassphrase(this.selectedScope!);
+				} catch (e) {
+					console.error("Crypt: keychain delete failed", e);
+				}
+			}
 
 			new Notice(
 				`${this.selectedScope} unlocked — ${pluralize(count, "document")} decrypted.`

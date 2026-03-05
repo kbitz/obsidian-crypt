@@ -12,9 +12,11 @@ import {
 	createEmptyMeta,
 	createFileEntry,
 	readMeta,
+	vaultWriteBinary,
 	writeMeta,
 } from "../meta";
 import { addScopeDropdown, addPassphraseField, pluralize, todayISO } from "./shared";
+import { savePassphrase } from "../keychain";
 
 export class LockModal extends Modal {
 	plugin: CryptPlugin;
@@ -122,6 +124,7 @@ export class LockModal extends Modal {
 				// Skip files whose .enc already exists (partial prior lock)
 				if (this.app.vault.getAbstractFileByPath(encPath) && previousFiles[relativeEnc]) {
 					meta.files[relativeEnc] = previousFiles[relativeEnc];
+					await this.app.vault.delete(file);
 					await writeMeta(this.app.vault, scope, meta);
 					count++;
 					continue;
@@ -131,7 +134,7 @@ export class LockModal extends Modal {
 				const plaintext = await this.app.vault.readBinary(file);
 				const ciphertext = await encrypt(key, iv, plaintext);
 
-				await this.app.vault.adapter.writeBinary(encPath, new Uint8Array(ciphertext));
+				await vaultWriteBinary(this.app.vault, encPath, ciphertext);
 				await this.app.vault.delete(file);
 
 				const relative = file.path.slice(scope.length + 1);
@@ -150,6 +153,14 @@ export class LockModal extends Modal {
 			meta.state = "locked";
 			meta.locked_at = new Date().toISOString();
 			await writeMeta(this.app.vault, scope, meta);
+
+			if (this.plugin.settings.useKeychain) {
+				try {
+					await savePassphrase(scope, this.passphrase);
+				} catch (e) {
+					console.error("Crypt: keychain save failed", e);
+				}
+			}
 
 			new Notice(
 				`${scope} locked — ${pluralize(count, "document")} encrypted.`

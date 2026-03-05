@@ -2,7 +2,7 @@
  * .vault-meta.json schema, read/write, migration.
  */
 
-import type { Vault } from "obsidian";
+import type { TFile, Vault } from "obsidian";
 
 export const META_FILENAME = ".vault-meta.json";
 export const CURRENT_VERSION = 1;
@@ -73,13 +73,26 @@ export async function readMeta(
 	scopePath: string
 ): Promise<VaultMeta | null> {
 	const metaPath = `${scopePath}/${META_FILENAME}`;
+
+	// Try vault index first, fall back to adapter (index may lag after adapter.write)
+	let content: string;
 	const file = vault.getAbstractFileByPath(metaPath);
-	if (!file || !isFile(file)) return null;
+	if (file && isFile(file)) {
+		try {
+			content = await vault.read(file as any);
+		} catch {
+			return null;
+		}
+	} else {
+		try {
+			content = await vault.adapter.read(metaPath);
+		} catch {
+			return null;
+		}
+	}
 
 	try {
-		const content = await vault.read(file as any);
-		const parsed = JSON.parse(content);
-		return migrate(parsed);
+		return migrate(JSON.parse(content));
 	} catch {
 		return null;
 	}
@@ -97,6 +110,28 @@ export async function writeMeta(
 		await vault.modify(existing as any, content);
 	} else {
 		await vault.adapter.write(metaPath, content);
+	}
+}
+
+/**
+ * Write binary data using vault-level APIs so the file appears in Obsidian's index.
+ * Falls back to adapter.writeBinary if the index is stale (e.g. retry after crash).
+ */
+export async function vaultWriteBinary(
+	vault: Vault,
+	path: string,
+	data: ArrayBuffer
+): Promise<void> {
+	const existing = vault.getAbstractFileByPath(path);
+	if (existing && isFile(existing)) {
+		await vault.modifyBinary(existing as TFile, data);
+	} else {
+		try {
+			await vault.createBinary(path, data);
+		} catch {
+			// File exists on disk but not in index — overwrite via adapter
+			await vault.adapter.writeBinary(path, new Uint8Array(data));
+		}
 	}
 }
 

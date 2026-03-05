@@ -16,6 +16,10 @@ export function makeMockVault(files: Record<string, string> = {}) {
 			files[path] = content;
 		}),
 		adapter: {
+			read: vi.fn(async (path: string) => {
+				if (path in files) return files[path];
+				throw new Error("File not found");
+			}),
 			write: vi.fn(async (path: string, content: string) => {
 				files[path] = content;
 			}),

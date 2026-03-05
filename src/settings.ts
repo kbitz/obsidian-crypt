@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Platform, PluginSettingTab, Setting } from "obsidian";
 import type CryptPlugin from "./main";
 
 export interface CryptSettings {
@@ -6,6 +6,7 @@ export interface CryptSettings {
 	targetExtensions: string[];
 	pbkdf2Iterations: number;
 	docTypeTags: string[];
+	useKeychain: boolean;
 }
 
 export const DEFAULT_SETTINGS: CryptSettings = {
@@ -15,6 +16,7 @@ export const DEFAULT_SETTINGS: CryptSettings = {
 	],
 	pbkdf2Iterations: 100000,
 	docTypeTags: [],
+	useKeychain: false,
 };
 
 export class CryptSettingTab extends PluginSettingTab {
@@ -95,5 +97,21 @@ export class CryptSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		if (!Platform.isMobile && process.platform === "darwin") {
+			new Setting(containerEl)
+				.setName("Save passphrases to Keychain")
+				.setDesc(
+					"Store and retrieve passphrases from the macOS Keychain. When enabled, lock saves the passphrase and unlock auto-fills it."
+				)
+				.addToggle((toggle) =>
+					toggle
+						.setValue(this.plugin.settings.useKeychain)
+						.onChange(async (value) => {
+							this.plugin.settings.useKeychain = value;
+							await this.plugin.saveSettings();
+						})
+				);
+		}
 	}
 }
