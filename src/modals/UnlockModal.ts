@@ -93,14 +93,17 @@ export class UnlockModal extends Modal {
 			return;
 		}
 
+		// Capture before close() wipes them
+		const scope = this.selectedScope;
+		const passphrase = this.passphrase;
 		this.close();
-		new Notice(`Unlocking ${this.selectedScope}...`);
+		new Notice(`Unlocking ${scope}...`);
 
 		const salt = fromBase64(meta.salt);
 		let key: CryptoKey;
 		try {
 			key = await deriveKey(
-				this.passphrase,
+				passphrase,
 				salt,
 				meta.pbkdf2_iterations
 			);
@@ -115,7 +118,7 @@ export class UnlockModal extends Modal {
 		let verifiedPlaintext: ArrayBuffer | null = null;
 		if (entries.length > 0) {
 			const [relPath, entry] = entries[0];
-			const encPath = `${this.selectedScope}/${relPath}`;
+			const encPath = `${scope}/${relPath}`;
 			const encFile = this.app.vault.getAbstractFileByPath(encPath);
 			if (encFile) {
 				try {
@@ -133,7 +136,7 @@ export class UnlockModal extends Modal {
 			let count = 0;
 			for (let i = 0; i < entries.length; i++) {
 				const [relPath, entry] = entries[i];
-				const encPath = `${this.selectedScope}/${relPath}`;
+				const encPath = `${scope}/${relPath}`;
 				const encFile = this.app.vault.getAbstractFileByPath(encPath);
 				if (!encFile) continue;
 
@@ -155,18 +158,18 @@ export class UnlockModal extends Modal {
 
 			meta.state = "unlocked";
 			meta.locked_at = null;
-			await writeMeta(this.app.vault, this.selectedScope!, meta);
+			await writeMeta(this.app.vault, scope, meta);
 
 			if (this.plugin.settings.useKeychain) {
 				try {
-					await deletePassphrase(this.selectedScope!);
+					await deletePassphrase(scope);
 				} catch (e) {
 					console.error("Crypt: keychain delete failed", e);
 				}
 			}
 
 			new Notice(
-				`${this.selectedScope} unlocked — ${pluralize(count, "document")} decrypted.`
+				`${scope} unlocked — ${pluralize(count, "document")} decrypted.`
 			);
 		} catch (e) {
 			console.error("Crypt: unlock failed", e);

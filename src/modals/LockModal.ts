@@ -89,6 +89,7 @@ export class LockModal extends Modal {
 			return;
 		}
 
+		const passphrase = this.passphrase;
 		this.close();
 		new Notice(`Locking ${scope}...`);
 
@@ -96,7 +97,7 @@ export class LockModal extends Modal {
 			// Reuse existing salt on re-lock; only generate fresh salt for new scopes
 			const salt = existing ? fromBase64(existing.salt) : generateSalt();
 			const key = await deriveKey(
-				this.passphrase,
+				passphrase,
 				salt,
 				this.plugin.settings.pbkdf2Iterations
 			);
@@ -157,7 +158,7 @@ export class LockModal extends Modal {
 
 			if (this.plugin.settings.useKeychain) {
 				try {
-					await savePassphrase(scope, this.passphrase);
+					await savePassphrase(scope, passphrase);
 				} catch (e) {
 					console.error("Crypt: keychain save failed", e);
 				}
