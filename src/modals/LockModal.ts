@@ -103,7 +103,8 @@ export class LockModal extends Modal {
 				this.plugin.settings.pbkdf2Iterations
 			);
 
-			// Clear stale file entries before re-populating
+			// Save existing entries for crash recovery, then clear for re-population
+			const previousFiles = { ...meta.files };
 			meta.files = {};
 
 			// Set intermediate state for crash recovery
@@ -115,11 +116,21 @@ export class LockModal extends Modal {
 			const today = todayISO();
 
 			for (const file of files) {
+				const encPath = file.path + ".enc";
+				const relativeEnc = encPath.slice(scope.length + 1);
+
+				// Skip files whose .enc already exists (partial prior lock)
+				if (this.app.vault.getAbstractFileByPath(encPath) && previousFiles[relativeEnc]) {
+					meta.files[relativeEnc] = previousFiles[relativeEnc];
+					await writeMeta(this.app.vault, scope, meta);
+					count++;
+					continue;
+				}
+
 				const iv = generateIV();
 				const plaintext = await this.app.vault.readBinary(file);
 				const ciphertext = await encrypt(key, iv, plaintext);
 
-				const encPath = file.path + ".enc";
 				await this.app.vault.adapter.writeBinary(encPath, new Uint8Array(ciphertext));
 				await this.app.vault.delete(file);
 

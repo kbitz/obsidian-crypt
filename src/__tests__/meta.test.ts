@@ -76,7 +76,7 @@ describe("writeMeta", () => {
 
 		await writeMeta(vault as any, "2024", meta);
 
-		expect(vault.create).toHaveBeenCalledWith(
+		expect(vault.adapter.write).toHaveBeenCalledWith(
 			`2024/${META_FILENAME}`,
 			JSON.stringify(meta, null, 2)
 		);
@@ -101,7 +101,7 @@ describe("writeMeta", () => {
 
 		await writeMeta(vault as any, "2024", meta);
 
-		const written = vault.create.mock.calls[0][1];
+		const written = vault.adapter.write.mock.calls[0][1];
 		expect(written).toBe(JSON.stringify(meta, null, 2));
 		expect(written).toContain("\n"); // pretty-printed
 	});

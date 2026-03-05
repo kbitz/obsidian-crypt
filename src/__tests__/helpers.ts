@@ -15,5 +15,13 @@ export function makeMockVault(files: Record<string, string> = {}) {
 		create: vi.fn(async (path: string, content: string) => {
 			files[path] = content;
 		}),
+		adapter: {
+			write: vi.fn(async (path: string, content: string) => {
+				files[path] = content;
+			}),
+			writeBinary: vi.fn(async (path: string, data: Uint8Array) => {
+				files[path] = String.fromCharCode(...data);
+			}),
+		},
 	};
 }

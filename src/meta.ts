@@ -96,7 +96,7 @@ export async function writeMeta(
 	if (existing && isFile(existing)) {
 		await vault.modify(existing as any, content);
 	} else {
-		await vault.create(metaPath, content);
+		await vault.adapter.write(metaPath, content);
 	}
 }
 
