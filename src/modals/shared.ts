@@ -23,6 +23,7 @@ export function addScopeDropdown(
 export function addPassphraseField(
 	contentEl: HTMLElement,
 	onChange: (value: string) => void,
+	onInput?: (el: HTMLInputElement) => void,
 	placeholder = "Enter passphrase"
 ): void {
 	new Setting(contentEl).setName("Passphrase").addText((text) => {
@@ -30,6 +31,7 @@ export function addPassphraseField(
 		text.inputEl.autocomplete = "off";
 		text.setPlaceholder(placeholder);
 		text.onChange(onChange);
+		if (onInput) onInput(text.inputEl);
 	});
 }
 

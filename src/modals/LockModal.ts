@@ -16,7 +16,7 @@ import {
 	writeMeta,
 } from "../meta";
 import { addScopeDropdown, addPassphraseField, pluralize, todayISO } from "./shared";
-import { savePassphrase } from "../keychain";
+import { getPassphrase, savePassphrase } from "../keychain";
 
 export class LockModal extends Modal {
 	plugin: CryptPlugin;
@@ -47,9 +47,12 @@ export class LockModal extends Modal {
 			this.selectedScope = v;
 		}, this.selectedScope);
 
+		let passphraseInput: HTMLInputElement | null = null;
+		let confirmInput: HTMLInputElement | null = null;
+
 		addPassphraseField(contentEl, (v) => {
 			this.passphrase = v;
-		});
+		}, (el) => { passphraseInput = el; });
 
 		new Setting(contentEl).setName("Confirm passphrase").addText((text) => {
 			text.inputEl.type = "password";
@@ -58,6 +61,7 @@ export class LockModal extends Modal {
 			text.onChange((v) => {
 				this.confirm = v;
 			});
+			confirmInput = text.inputEl;
 		});
 
 		new Setting(contentEl).addButton((btn) =>
@@ -66,6 +70,19 @@ export class LockModal extends Modal {
 				.setCta()
 				.onClick(() => this.doLock())
 		);
+
+		// Auto-fill from keychain in universal mode
+		if (this.plugin.settings.useKeychain && this.plugin.settings.useUniversalPassphrase) {
+			const account = this.plugin.keychainAccount("");
+			getPassphrase(account).then((saved) => {
+				if (saved) {
+					this.passphrase = saved;
+					this.confirm = saved;
+					if (passphraseInput) passphraseInput.value = saved;
+					if (confirmInput) confirmInput.value = saved;
+				}
+			});
+		}
 	}
 
 	async doLock(): Promise<void> {
@@ -158,7 +175,7 @@ export class LockModal extends Modal {
 
 			if (this.plugin.settings.useKeychain) {
 				try {
-					await savePassphrase(scope, passphrase);
+					await savePassphrase(this.plugin.keychainAccount(scope), passphrase);
 				} catch (e) {
 					console.error("Crypt: keychain save failed", e);
 				}

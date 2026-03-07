@@ -43,7 +43,7 @@ export class UnlockModal extends Modal {
 		const onScopeChange = async (v: string | null) => {
 			this.selectedScope = v;
 			if (v && this.plugin.settings.useKeychain) {
-				const saved = await getPassphrase(v);
+				const saved = await getPassphrase(this.plugin.keychainAccount(v));
 				if (saved && passphraseInput) {
 					this.passphrase = saved;
 					passphraseInput.value = saved;

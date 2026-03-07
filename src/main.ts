@@ -5,7 +5,7 @@ import { UnlockModal } from "./modals/UnlockModal";
 import { AddDocModal } from "./modals/AddDocModal";
 import { StatusModal } from "./modals/StatusModal";
 import { readMeta, META_FILENAME } from "./meta";
-import { getPassphrase } from "./keychain";
+import { getPassphrase, UNIVERSAL_ACCOUNT } from "./keychain";
 
 export default class CryptPlugin extends Plugin {
 	settings: CryptSettings = DEFAULT_SETTINGS;
@@ -59,7 +59,7 @@ export default class CryptPlugin extends Plugin {
 
 							// Bypass modal if keychain has the passphrase
 							if (this.settings.useKeychain) {
-								const saved = await getPassphrase(scope);
+								const saved = await getPassphrase(this.keychainAccount(scope));
 								if (saved) {
 									if (isLocked) {
 										const modal = new UnlockModal(this.app, this, scope);
@@ -145,6 +145,11 @@ export default class CryptPlugin extends Plugin {
 			}
 		}
 		return null;
+	}
+
+	/** Return the keychain account to use for a given scope. */
+	keychainAccount(scope: string): string {
+		return this.settings.useUniversalPassphrase ? UNIVERSAL_ACCOUNT : scope;
 	}
 
 	/** Find all target files (by extension) under a scope folder, excluding .enc and meta files. */

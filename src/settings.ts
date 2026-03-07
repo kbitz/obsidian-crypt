@@ -8,6 +8,7 @@ export interface CryptSettings {
 	pbkdf2Iterations: number;
 	docTypeTags: string[];
 	useKeychain: boolean;
+	useUniversalPassphrase: boolean;
 }
 
 export const DEFAULT_SETTINGS: CryptSettings = {
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: CryptSettings = {
 	pbkdf2Iterations: 100000,
 	docTypeTags: [],
 	useKeychain: false,
+	useUniversalPassphrase: false,
 };
 
 export class CryptSettingTab extends PluginSettingTab {
@@ -127,8 +129,25 @@ export class CryptSettingTab extends PluginSettingTab {
 						.onChange(async (value) => {
 							this.plugin.settings.useKeychain = value;
 							await this.plugin.saveSettings();
+							this.display();
 						})
 				);
+
+			if (this.plugin.settings.useKeychain) {
+				new Setting(containerEl)
+					.setName("Universal passphrase")
+					.setDesc(
+						"Use the same passphrase for all scope folders. Once saved to Keychain, it applies to every lock/unlock."
+					)
+					.addToggle((toggle) =>
+						toggle
+							.setValue(this.plugin.settings.useUniversalPassphrase)
+							.onChange(async (value) => {
+								this.plugin.settings.useUniversalPassphrase = value;
+								await this.plugin.saveSettings();
+							})
+					);
+			}
 		}
 	}
 }

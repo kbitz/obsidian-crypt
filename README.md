@@ -51,7 +51,7 @@ Files that are always skipped:
 | IV | Random 12 bytes, unique per file |
 | Implementation | Web Crypto API — zero runtime dependencies |
 
-Your passphrase is never stored anywhere. It's derived into a `CryptoKey`, used for the operation, then discarded.
+Your passphrase is never stored anywhere by default. It's derived into a `CryptoKey`, used for the operation, then discarded. On macOS, you can optionally save passphrases to the system Keychain for convenience (see Settings).
 
 ## Platform Support
 
@@ -63,10 +63,13 @@ The only difference is the **Add File** command: on desktop it opens a native fi
 
 | Setting | Default | Description |
 |---------|---------|-------------|
+| Scope root | *(empty)* | Folder to look inside for scope folders (empty = vault root) |
 | Scope pattern | `^\d{4}$` | Regex for top-level folders eligible for encryption |
 | Target extensions | pdf, csv, xlsx, xls, png, jpg, jpeg, heic, tiff | File types to encrypt (comma-separated) |
 | PBKDF2 iterations | 100,000 | Key derivation iterations (min 10,000) |
 | Document type tags | *(empty)* | Optional tags for the Add File modal (e.g., W-2, K-1) |
+| Save passphrases to Keychain | off | macOS only — store/retrieve passphrases from the system Keychain |
+| Universal passphrase | off | Use the same passphrase for all scope folders (requires Keychain) |
 
 ## Installation
 

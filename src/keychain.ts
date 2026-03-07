@@ -6,6 +6,7 @@
 import { Platform } from "obsidian";
 
 const SERVICE = "obsidian-crypt";
+export const UNIVERSAL_ACCOUNT = "__universal__";
 
 function isMacDesktop(): boolean {
 	return !Platform.isMobile && process.platform === "darwin";
