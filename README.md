@@ -24,13 +24,13 @@ Operations are atomic per-file — if something interrupts mid-lock, the manifes
 | `Crypt: Add File` | Import a file into a scope folder |
 | `Crypt: Status` | Show lock state of all scope folders |
 
-A ribbon icon (lock) also opens the Status view.
+A ribbon icon (lock) also opens the Status view. You can also right-click any scope folder in the file explorer to lock or unlock it from the context menu.
 
 ## Scope Folders
 
 A "scope" is a top-level vault folder that matches a configurable regex pattern. By default, the pattern is `^\d{4}$`, which matches year-named folders like `2024`, `2025`, etc. Only scope folders can be locked or unlocked.
 
-You can change the pattern in settings to match whatever folder naming scheme you use.
+You can change the pattern in settings to match whatever folder naming scheme you use. If your scope folders live inside a subfolder (e.g. `Documents/2024`), set the **Scope root** setting to that parent folder.
 
 ## What Gets Encrypted
 
@@ -73,7 +73,33 @@ The only difference is the **Add File** command: on desktop it opens a native fi
 
 ## Installation
 
-### From source
+### From Obsidian Community Plugins
+
+1. Open **Settings → Community plugins → Browse**
+2. Search for **"Crypt"**
+3. Click **Install**, then **Enable**
+
+> **Note:** If Crypt is not yet listed in the community plugin browser, use one of the methods below.
+
+### With BRAT (Beta Reviewers Auto-update Tool)
+
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) lets you install plugins directly from GitHub before they appear in the community browser.
+
+1. Install **BRAT** from Obsidian's Community Plugins
+2. Open **Settings → BRAT → Add Beta plugin**
+3. Enter: `kbitz/obsidian-crypt`
+4. Click **Add Plugin**, then enable **Crypt** in Community Plugins
+
+BRAT will also keep the plugin updated automatically.
+
+### Manual Install
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/kbitz/obsidian-crypt/releases/latest)
+2. Create a folder at `.obsidian/plugins/obsidian-crypt/` in your vault
+3. Copy the three files into that folder
+4. Open **Settings → Community plugins** and enable **Crypt**
+
+### From Source
 
 ```bash
 git clone https://github.com/kbitz/obsidian-crypt.git
@@ -82,11 +108,7 @@ npm install
 npm run build
 ```
 
-Copy `main.js`, `manifest.json`, and `styles.css` into your vault at `.obsidian/plugins/obsidian-crypt/`, then enable "Crypt" in Obsidian's Community Plugins settings.
-
-### Manual
-
-Download the latest release and extract it into `.obsidian/plugins/obsidian-crypt/` in your vault.
+Copy `main.js`, `manifest.json`, and `styles.css` into `.obsidian/plugins/obsidian-crypt/` in your vault, then enable **Crypt** in Community Plugins settings.
 
 ## License
 
