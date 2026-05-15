@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-crypt",
-	"version": "1.0.5.1",
+	"version": "1.0.6",
 	"description": "Per-folder encryption for binary files in Obsidian",
 	"main": "main.js",
 	"author": "Karl Bitz",

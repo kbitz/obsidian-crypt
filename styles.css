@@ -35,3 +35,21 @@
 	background: var(--background-modifier-success);
 	color: var(--text-on-accent);
 }
+
+.crypt-folder-icon {
+	display: inline-flex;
+	align-items: center;
+	margin-left: 6px;
+	vertical-align: middle;
+	--icon-size: 14px;
+}
+
+.nav-folder-title[data-crypt-state="locked"] .crypt-folder-icon {
+	opacity: 0.85;
+	color: var(--text-accent);
+}
+
+.nav-folder-title[data-crypt-state="unlocked"] .crypt-folder-icon {
+	opacity: 0.5;
+	color: var(--text-muted);
+}
