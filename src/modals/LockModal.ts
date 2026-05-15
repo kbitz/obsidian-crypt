@@ -131,6 +131,7 @@ export class LockModal extends Modal {
 			// Set intermediate state for crash recovery
 			meta.state = "locking";
 			await writeMeta(this.app.vault, scope, meta);
+			this.plugin.lockCache.refresh();
 
 			const files = this.plugin.getTargetFiles(scope);
 			let count = 0;
