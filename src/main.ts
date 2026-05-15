@@ -6,12 +6,17 @@ import { AddDocModal } from "./modals/AddDocModal";
 import { StatusModal } from "./modals/StatusModal";
 import { readMeta, META_FILENAME } from "./meta";
 import { getPassphrase, UNIVERSAL_ACCOUNT } from "./keychain";
+import { LockStateCache, resolveMenuTitle } from "./lockStateCache";
+import { FileExplorerDecorator } from "./fileExplorerDecorator";
 
 export default class CryptPlugin extends Plugin {
 	settings: CryptSettings = DEFAULT_SETTINGS;
+	lockCache!: LockStateCache;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+
+		this.lockCache = new LockStateCache(this.app.vault, () => this.getScopes());
 
 		this.registerExtensions(["enc"], "enc");
 
@@ -50,18 +55,22 @@ export default class CryptPlugin extends Plugin {
 				const scope = this.resolveScope(file);
 				if (!scope) return;
 
+				const isLocked = this.lockCache.isLocked(scope);
+				const title = resolveMenuTitle(scope, isLocked);
+
 				menu.addItem((item) => {
-					item.setTitle("Crypt: Lock / Unlock")
-						.setIcon("lock")
+					item.setTitle(title)
+						.setIcon(isLocked ? "unlock" : "lock")
 						.onClick(async () => {
+							// Re-read fresh state at click time — cache may be a beat stale.
 							const meta = await readMeta(this.app.vault, scope);
-							const isLocked = meta?.state === "locked" || meta?.state === "locking";
+							const lockedNow = meta?.state === "locked" || meta?.state === "locking";
 
 							// Bypass modal if keychain has the passphrase
 							if (this.settings.useKeychain) {
 								const saved = await getPassphrase(this.keychainAccount(scope));
 								if (saved) {
-									if (isLocked) {
+									if (lockedNow) {
 										const modal = new UnlockModal(this.app, this, scope);
 										modal.selectedScope = scope;
 										modal.passphrase = saved;
@@ -77,7 +86,7 @@ export default class CryptPlugin extends Plugin {
 								}
 							}
 
-							if (isLocked) {
+							if (lockedNow) {
 								new UnlockModal(this.app, this, scope).open();
 							} else {
 								new LockModal(this.app, this, scope).open();
@@ -86,10 +95,32 @@ export default class CryptPlugin extends Plugin {
 				});
 			})
 		);
+
+		// Keep the cache in sync with meta-file writes (covers in-app lock/unlock
+		// progress writes AND cross-device sync updates).
+		const refreshOnMeta = (file: TAbstractFile) => {
+			if (file.name === META_FILENAME) this.lockCache.refresh();
+		};
+		this.registerEvent(this.app.vault.on("modify", refreshOnMeta));
+		this.registerEvent(this.app.vault.on("create", refreshOnMeta));
+		this.registerEvent(this.app.vault.on("delete", refreshOnMeta));
+		// Scope folders themselves can come and go — rename/delete should re-evaluate.
+		this.registerEvent(
+			this.app.vault.on("rename", () => this.lockCache.refresh())
+		);
+
+		const decorator = new FileExplorerDecorator(this, this.lockCache);
+		decorator.start();
+
+		this.app.workspace.onLayoutReady(() => {
+			this.lockCache.refresh();
+		});
 	}
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// Pattern or root changes invalidate the scope list — refresh if cache exists.
+		this.lockCache?.refresh();
 	}
 
 	async saveSettings(): Promise<void> {

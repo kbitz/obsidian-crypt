@@ -159,6 +159,7 @@ export class UnlockModal extends Modal {
 			meta.state = "unlocked";
 			meta.locked_at = null;
 			await writeMeta(this.app.vault, scope, meta);
+			this.plugin.lockCache.refresh();
 
 			new Notice(
 				`${scope} unlocked — ${pluralize(count, "document")} decrypted.`
